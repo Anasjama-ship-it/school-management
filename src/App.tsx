@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, checkSupabaseHealth } from './lib/supabase';
 import {
   fetchStudents,
   createStudent,
@@ -69,6 +69,7 @@ function SchoolManagementApp() {
   const [isRecordPaymentModalOpen, setIsRecordPaymentModalOpen] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isConnectedToSupabase, setIsConnectedToSupabase] = useState(false);
 
   // Supabase State Collections
   const [students, setStudents] = useState<Student[]>([]);
@@ -80,6 +81,12 @@ function SchoolManagementApp() {
   const [examResults, setExamResults] = useState<ExamResult[]>([]);
   const [notifications, setNotifications] = useState<NotificationLog[]>([]);
   const [trashItems, setTrashItems] = useState<TrashItem[]>([]);
+
+  const checkConnection = async () => {
+    const res = await checkSupabaseHealth();
+    setIsConnectedToSupabase(res.connected);
+    return res.connected;
+  };
 
   // Load all Supabase tables
   const loadAllSupabaseData = async () => {
@@ -112,17 +119,28 @@ function SchoolManagementApp() {
 
   // Subscribe to Supabase Realtime changes
   useEffect(() => {
-    loadAllSupabaseData();
+    let channel: any = null;
 
-    const channel = supabase
-      .channel('school-db-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        loadAllSupabaseData();
-      })
-      .subscribe();
+    const initConnectionAndData = async () => {
+      const connected = await checkConnection();
+      await loadAllSupabaseData();
+
+      if (connected) {
+        channel = supabase
+          .channel('school-db-realtime')
+          .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+            loadAllSupabaseData();
+          })
+          .subscribe();
+      }
+    };
+
+    initConnectionAndData();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -197,7 +215,21 @@ function SchoolManagementApp() {
     subtitle: string,
     data: any
   ) => {
-    await createTrashItem({
+    // 1. Immediately remove from active state
+    if (originalCollection === 'students') {
+      setStudents((prev) => prev.filter((s) => s.id !== originalId));
+    } else if (originalCollection === 'teachers') {
+      setTeachers((prev) => prev.filter((t) => t.id !== originalId));
+    } else if (originalCollection === 'feePayments') {
+      setFeePayments((prev) => prev.filter((p) => p.id !== originalId));
+    } else if (originalCollection === 'exams') {
+      setExams((prev) => prev.filter((e) => e.id !== originalId));
+    } else if (originalCollection === 'examResults') {
+      setExamResults((prev) => prev.filter((r) => r.id !== originalId));
+    }
+
+    // 2. Create trash record in Supabase
+    const newTrash = await createTrashItem({
       originalCollection,
       originalId,
       entityType,
@@ -207,26 +239,35 @@ function SchoolManagementApp() {
       data
     });
 
+    if (newTrash) {
+      setTrashItems((prev) => [newTrash, ...prev.filter((t) => t.id !== newTrash.id)]);
+    }
+
+    // 3. Delete from original Supabase table
     if (originalCollection === 'students') await deleteStudentRecord(originalId);
     else if (originalCollection === 'teachers') await deleteTeacherRecord(originalId);
     else if (originalCollection === 'feePayments') await deleteFeePaymentRecord(originalId);
     else if (originalCollection === 'exams') await deleteExamRecord(originalId);
     else if (originalCollection === 'examResults') await deleteExamResultRecord(originalId);
 
+    // 4. Reload full Supabase state
     await loadAllSupabaseData();
   };
 
   const handleRestoreFromTrash = async (item: TrashItem) => {
+    setTrashItems((prev) => prev.filter((t) => t.id !== item.id));
     await restoreItemFromTrash(item);
     await loadAllSupabaseData();
   };
 
   const handleDeletePermanently = async (trashId: string) => {
+    setTrashItems((prev) => prev.filter((t) => t.id !== trashId));
     await deleteTrashItemPermanently(trashId);
     await loadAllSupabaseData();
   };
 
   const handleEmptyTrash = async () => {
+    setTrashItems([]);
     await emptyAllTrash();
     await loadAllSupabaseData();
   };
@@ -376,6 +417,7 @@ function SchoolManagementApp() {
           unreadNotifsCount={notifications.length}
           onOpenNotifsTab={() => setActiveTab('notifications')}
           onOpenSupabaseModal={() => setIsSupabaseModalOpen(true)}
+          isConnectedToSupabase={isConnectedToSupabase}
         />
 
         <main className="flex-1 p-4 lg:p-8 max-w-7xl w-full mx-auto">
@@ -490,6 +532,7 @@ function SchoolManagementApp() {
         isOpen={isSupabaseModalOpen}
         onClose={() => setIsSupabaseModalOpen(false)}
         onReseedData={handleSeedData}
+        onConnectionStatusChange={(connected) => setIsConnectedToSupabase(connected)}
       />
     </div>
   );

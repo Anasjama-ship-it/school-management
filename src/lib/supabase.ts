@@ -28,6 +28,61 @@ export const getSupabaseConfig = () => {
   return getStoredCredentials();
 };
 
+export interface SupabaseHealthResult {
+  connected: boolean;
+  message: string;
+  isCustomConfigured: boolean;
+  tablesExist: boolean;
+}
+
+export const checkSupabaseHealth = async (): Promise<SupabaseHealthResult> => {
+  const creds = getStoredCredentials();
+
+  if (creds.url.includes('school-management-demo.supabase.co') || !creds.isCustom) {
+    return {
+      connected: false,
+      message: 'Supabase Project URL and Key not configured. Click to connect your Supabase database.',
+      isCustomConfigured: false,
+      tablesExist: false
+    };
+  }
+
+  try {
+    const { error } = await supabase.from('students').select('id').limit(1);
+
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('relation')) {
+        return {
+          connected: false,
+          message: 'Connected to Supabase project, but database tables do not exist yet. Please run the SQL schema.',
+          isCustomConfigured: true,
+          tablesExist: false
+        };
+      }
+      return {
+        connected: false,
+        message: `Supabase Error: ${error.message || 'Failed to query database.'}`,
+        isCustomConfigured: true,
+        tablesExist: false
+      };
+    }
+
+    return {
+      connected: true,
+      message: 'Connected to Supabase Cloud Database successfully!',
+      isCustomConfigured: true,
+      tablesExist: true
+    };
+  } catch (err: any) {
+    return {
+      connected: false,
+      message: `Network Error: ${err?.message || 'Could not reach Supabase host.'}`,
+      isCustomConfigured: true,
+      tablesExist: false
+    };
+  }
+};
+
 export const saveSupabaseConfig = (url: string, key: string) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('supabase_custom_url', url);

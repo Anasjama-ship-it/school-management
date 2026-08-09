@@ -13,14 +13,14 @@ CREATE TABLE IF NOT EXISTS public.students (
   full_name TEXT NOT NULL,
   grade_class TEXT NOT NULL,
   roll_number TEXT,
-  gender TEXT CHECK (gender IN ('Male', 'Female', 'Other')),
+  gender TEXT,
   date_of_birth DATE,
   parent_name TEXT NOT NULL,
   parent_phone TEXT NOT NULL,
   parent_email TEXT,
   photo_url TEXT,
   address TEXT,
-  status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Graduated')),
+  status TEXT DEFAULT 'Active',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS public.teachers (
   assigned_classes JSONB DEFAULT '[]'::jsonb,
   qualification TEXT,
   joining_date DATE,
-  status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'On Leave', 'Resigned')),
+  status TEXT DEFAULT 'Active',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS public.classes (
 
 -- 4. ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS public.attendance (
-  id TEXT PRIMARY KEY, -- e.g. "Grade10A_2026-08-09"
+  id TEXT PRIMARY KEY,
   date DATE NOT NULL,
   grade_class TEXT NOT NULL,
   records JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -102,13 +102,13 @@ CREATE TABLE IF NOT EXISTS public.exams (
   end_date DATE,
   grade_classes JSONB DEFAULT '[]'::jsonb,
   subjects JSONB DEFAULT '[]'::jsonb,
-  status TEXT DEFAULT 'Upcoming' CHECK (status IN ('Upcoming', 'Ongoing', 'Completed')),
+  status TEXT DEFAULT 'Upcoming',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 8. EXAM RESULTS (GRADES) TABLE
 CREATE TABLE IF NOT EXISTS public.exam_results (
-  id TEXT PRIMARY KEY, -- e.g. "examId_studentId"
+  id TEXT PRIMARY KEY,
   exam_id TEXT NOT NULL,
   exam_title TEXT,
   student_id TEXT NOT NULL,
@@ -131,8 +131,8 @@ CREATE TABLE IF NOT EXISTS public.users (
   uid TEXT UNIQUE,
   email TEXT UNIQUE NOT NULL,
   display_name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'Teacher' CHECK (role IN ('Admin', 'Teacher', 'Accountant')),
-  status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
+  role TEXT NOT NULL DEFAULT 'Teacher',
+  status TEXT DEFAULT 'Active',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -142,11 +142,11 @@ CREATE TABLE IF NOT EXISTS public.parent_notifications (
   student_id TEXT,
   student_name TEXT,
   parent_phone TEXT NOT NULL,
-  channel TEXT DEFAULT 'SMS' CHECK (channel IN ('SMS', 'WhatsApp')),
+  channel TEXT DEFAULT 'SMS',
   type TEXT DEFAULT 'Announcement',
   message TEXT NOT NULL,
   sent_at TIMESTAMPTZ DEFAULT NOW(),
-  status TEXT DEFAULT 'Delivered' CHECK (status IN ('Delivered', 'Pending', 'Failed')),
+  status TEXT DEFAULT 'Delivered',
   sent_by TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -169,7 +169,7 @@ CREATE TABLE IF NOT EXISTS public.trash_items (
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================================
 
--- Enable RLS on all tables
+-- Enable Row Level Security on all tables
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
@@ -182,64 +182,36 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trash_items ENABLE ROW LEVEL SECURITY;
 
--- Allow public / authenticated access (with fallback policies)
-DO $$
-BEGIN
-  -- Create permissive policies for application API access
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.students FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.students FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.students FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.students FOR DELETE USING (true)';
+-- Allow public read & write access for application client operations
+DROP POLICY IF EXISTS "Public access on students" ON public.students;
+CREATE POLICY "Public access on students" ON public.students FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.teachers FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.teachers FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.teachers FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.teachers FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on teachers" ON public.teachers;
+CREATE POLICY "Public access on teachers" ON public.teachers FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.classes FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.classes FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.classes FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.classes FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on classes" ON public.classes;
+CREATE POLICY "Public access on classes" ON public.classes FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.attendance FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.attendance FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.attendance FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.attendance FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on attendance" ON public.attendance;
+CREATE POLICY "Public access on attendance" ON public.attendance FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.fee_structures FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.fee_structures FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.fee_structures FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.fee_structures FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on fee_structures" ON public.fee_structures;
+CREATE POLICY "Public access on fee_structures" ON public.fee_structures FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.fee_payments FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.fee_payments FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.fee_payments FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.fee_payments FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on fee_payments" ON public.fee_payments;
+CREATE POLICY "Public access on fee_payments" ON public.fee_payments FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.exams FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.exams FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.exams FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.exams FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on exams" ON public.exams;
+CREATE POLICY "Public access on exams" ON public.exams FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.exam_results FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.exam_results FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.exam_results FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.exam_results FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on exam_results" ON public.exam_results;
+CREATE POLICY "Public access on exam_results" ON public.exam_results FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.users FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.users FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.users FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.users FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on users" ON public.users;
+CREATE POLICY "Public access on users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.parent_notifications FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.parent_notifications FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.parent_notifications FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.parent_notifications FOR DELETE USING (true)';
+DROP POLICY IF EXISTS "Public access on parent_notifications" ON public.parent_notifications;
+CREATE POLICY "Public access on parent_notifications" ON public.parent_notifications FOR ALL USING (true) WITH CHECK (true);
 
-  EXECUTE 'CREATE POLICY "Allow anon read all" ON public.trash_items FOR SELECT USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon insert all" ON public.trash_items FOR INSERT WITH CHECK (true)';
-  EXECUTE 'CREATE POLICY "Allow anon update all" ON public.trash_items FOR UPDATE USING (true)';
-  EXECUTE 'CREATE POLICY "Allow anon delete all" ON public.trash_items FOR DELETE USING (true)';
-EXCEPTION WHEN OTHERS THEN
-  NULL;
-END $$;
+DROP POLICY IF EXISTS "Public access on trash_items" ON public.trash_items;
+CREATE POLICY "Public access on trash_items" ON public.trash_items FOR ALL USING (true) WITH CHECK (true);

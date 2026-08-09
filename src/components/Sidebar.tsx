@@ -10,8 +10,6 @@ import {
   ShieldCheck,
   School,
   X,
-  Database,
-  Sparkles,
   Trash2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -22,17 +20,15 @@ interface SidebarProps {
   setActiveTab: (tab: string) => void;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
-  onSeedData: () => void;
-  isSeeding: boolean;
+  onSeedData?: () => void;
+  isSeeding?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   isOpen,
-  setIsOpen,
-  onSeedData,
-  isSeeding
+  setIsOpen
 }) => {
   const { activeRole, switchRole, hasRole } = useAuth();
 
@@ -201,29 +197,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Database Seed Data Callout */}
-        <div className="p-3 m-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
-          <div className="flex items-center space-x-2 text-slate-300 font-medium mb-1">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>Sample Data Ready</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
-            Populate Firestore with sample students, fees, grades & teachers.
-          </p>
-          <button
-            id="seed-demo-data-btn"
-            onClick={onSeedData}
-            disabled={isSeeding}
-            className="w-full flex items-center justify-center space-x-2 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-medium border border-slate-700 transition-colors disabled:opacity-50"
-          >
-            <Database className="w-3.5 h-3.5 text-blue-400" />
-            <span>{isSeeding ? 'Seeding...' : 'Load Demo Data'}</span>
-          </button>
-        </div>
-
         {/* Footer */}
         <div className="p-3 border-t border-slate-800 text-center text-[11px] text-slate-500">
-          Springfield SMS v2.5 • Firebase Live
+          Springfield SMS v2.5 • Supabase Database
         </div>
       </aside>
     </>

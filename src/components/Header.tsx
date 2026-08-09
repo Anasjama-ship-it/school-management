@@ -10,6 +10,7 @@ interface HeaderProps {
   unreadNotifsCount?: number;
   onOpenNotifsTab?: () => void;
   onOpenSupabaseModal?: () => void;
+  isConnectedToSupabase?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -19,7 +20,8 @@ export const Header: React.FC<HeaderProps> = ({
   setSearchTerm,
   unreadNotifsCount = 0,
   onOpenNotifsTab,
-  onOpenSupabaseModal
+  onOpenSupabaseModal,
+  isConnectedToSupabase = false
 }) => {
   const { userProfile, activeRole } = useAuth();
 
@@ -106,11 +108,20 @@ export const Header: React.FC<HeaderProps> = ({
         {onOpenSupabaseModal && (
           <button
             onClick={onOpenSupabaseModal}
-            className="hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-200 transition-all"
-            title="Supabase Database Status & Settings"
+            className={`hidden sm:inline-flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+              isConnectedToSupabase
+                ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+            }`}
+            title={isConnectedToSupabase ? 'Supabase Database Connected & Working' : 'Click to connect your Supabase database'}
           >
-            <Database className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Supabase Connected</span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnectedToSupabase ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+              }`}
+            />
+            <Database className={`w-3.5 h-3.5 ${isConnectedToSupabase ? 'text-emerald-600' : 'text-amber-600'}`} />
+            <span>{isConnectedToSupabase ? 'Supabase Connected' : 'Connect Supabase'}</span>
           </button>
         )}
 
