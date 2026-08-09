@@ -29,24 +29,33 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({ isOpen
   };
 
   const copySqlScript = () => {
-    const sqlText = `-- SCHOOL MANAGEMENT SYSTEM - SUPABASE DATABASE SCHEMA
+    const sqlText = `-- ====================================================================
+-- SCHOOL MANAGEMENT SYSTEM - SUPABASE DATABASE SCHEMA & RLS POLICIES
+-- Execute this script in your Supabase SQL Editor (https://app.supabase.com)
+-- ====================================================================
+
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. STUDENTS TABLE
 CREATE TABLE IF NOT EXISTS public.students (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
   grade_class TEXT NOT NULL,
   roll_number TEXT,
-  gender TEXT,
+  gender TEXT CHECK (gender IN ('Male', 'Female', 'Other')),
   date_of_birth DATE,
   parent_name TEXT NOT NULL,
   parent_phone TEXT NOT NULL,
   parent_email TEXT,
   photo_url TEXT,
   address TEXT,
-  status TEXT DEFAULT 'Active',
+  status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Graduated')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 2. TEACHERS TABLE
 CREATE TABLE IF NOT EXISTS public.teachers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   teacher_id TEXT UNIQUE NOT NULL,
@@ -57,19 +66,33 @@ CREATE TABLE IF NOT EXISTS public.teachers (
   assigned_classes JSONB DEFAULT '[]'::jsonb,
   qualification TEXT,
   joining_date DATE,
-  status TEXT DEFAULT 'Active',
+  status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'On Leave', 'Resigned')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 3. CLASSES TABLE
+CREATE TABLE IF NOT EXISTS public.classes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_name TEXT NOT NULL UNIQUE,
+  section TEXT,
+  room_number TEXT,
+  capacity INT DEFAULT 40,
+  class_teacher_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. ATTENDANCE TABLE
 CREATE TABLE IF NOT EXISTS public.attendance (
   id TEXT PRIMARY KEY,
   date DATE NOT NULL,
   grade_class TEXT NOT NULL,
   records JSONB NOT NULL DEFAULT '[]'::jsonb,
   marked_by TEXT,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 5. SCHOOL FEES (FEE STRUCTURES) TABLE
 CREATE TABLE IF NOT EXISTS public.fee_structures (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   grade_class TEXT UNIQUE NOT NULL,
@@ -79,9 +102,11 @@ CREATE TABLE IF NOT EXISTS public.fee_structures (
   library_fee NUMERIC(10,2) DEFAULT 0,
   other_fee NUMERIC(10,2) DEFAULT 0,
   total_fee NUMERIC(10,2) DEFAULT 0,
-  term TEXT DEFAULT 'Term 1'
+  term TEXT DEFAULT 'Term 1',
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 6. FEE PAYMENTS TABLE
 CREATE TABLE IF NOT EXISTS public.fee_payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   receipt_no TEXT UNIQUE NOT NULL,
@@ -98,6 +123,7 @@ CREATE TABLE IF NOT EXISTS public.fee_payments (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 7. EXAMS TABLE
 CREATE TABLE IF NOT EXISTS public.exams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
@@ -107,9 +133,11 @@ CREATE TABLE IF NOT EXISTS public.exams (
   end_date DATE,
   grade_classes JSONB DEFAULT '[]'::jsonb,
   subjects JSONB DEFAULT '[]'::jsonb,
-  status TEXT DEFAULT 'Upcoming'
+  status TEXT DEFAULT 'Upcoming' CHECK (status IN ('Upcoming', 'Ongoing', 'Completed')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 8. EXAM RESULTS (GRADES) TABLE
 CREATE TABLE IF NOT EXISTS public.exam_results (
   id TEXT PRIMARY KEY,
   exam_id TEXT NOT NULL,
@@ -128,29 +156,33 @@ CREATE TABLE IF NOT EXISTS public.exam_results (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 9. USERS & ROLES TABLE
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   uid TEXT UNIQUE,
   email TEXT UNIQUE NOT NULL,
   display_name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'Teacher',
-  status TEXT DEFAULT 'Active',
+  role TEXT NOT NULL DEFAULT 'Teacher' CHECK (role IN ('Admin', 'Teacher', 'Accountant')),
+  status TEXT DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 10. PARENT NOTIFICATIONS TABLE
 CREATE TABLE IF NOT EXISTS public.parent_notifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id TEXT,
   student_name TEXT,
   parent_phone TEXT NOT NULL,
-  channel TEXT DEFAULT 'SMS',
+  channel TEXT DEFAULT 'SMS' CHECK (channel IN ('SMS', 'WhatsApp')),
   type TEXT DEFAULT 'Announcement',
   message TEXT NOT NULL,
   sent_at TIMESTAMPTZ DEFAULT NOW(),
-  status TEXT DEFAULT 'Delivered',
-  sent_by TEXT
+  status TEXT DEFAULT 'Delivered' CHECK (status IN ('Delivered', 'Pending', 'Failed')),
+  sent_by TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 11. TRASH / RECYCLE BIN TABLE
 CREATE TABLE IF NOT EXISTS public.trash_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   original_collection TEXT NOT NULL,
@@ -160,8 +192,22 @@ CREATE TABLE IF NOT EXISTS public.trash_items (
   subtitle TEXT,
   deleted_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_by TEXT NOT NULL,
-  data JSONB NOT NULL
-);`;
+  data JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_structures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parent_notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trash_items ENABLE ROW LEVEL SECURITY;`;
 
     navigator.clipboard.writeText(sqlText);
     setCopied(true);
