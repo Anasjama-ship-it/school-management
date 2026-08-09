@@ -1,0 +1,156 @@
+{
+  "entities": {
+    "students": {
+      "title": "Students",
+      "description": "Student records in the school",
+      "properties": {
+        "studentId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "gradeClass": { "type": "string" },
+        "rollNumber": { "type": "string" },
+        "gender": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "parentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "parentEmail": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "address": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["studentId", "fullName", "gradeClass", "parentName", "parentPhone", "status"]
+    },
+    "teachers": {
+      "title": "Teachers",
+      "description": "Faculty and teacher records",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "assignedClasses": { "type": "array", "items": { "type": "string" } },
+        "qualification": { "type": "string" },
+        "joiningDate": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["teacherId", "fullName", "email", "phone"]
+    },
+    "attendance": {
+      "title": "Attendance",
+      "description": "Daily student attendance records",
+      "properties": {
+        "date": { "type": "string" },
+        "gradeClass": { "type": "string" },
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "studentId": { "type": "string" },
+              "status": { "type": "string" },
+              "remarks": { "type": "string" }
+            }
+          }
+        },
+        "markedBy": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["date", "gradeClass", "records"]
+    },
+    "feeStructures": {
+      "title": "Fee Structures",
+      "description": "Fee amounts set per class and fee type",
+      "properties": {
+        "gradeClass": { "type": "string" },
+        "tuitionFee": { "type": "number" },
+        "examFee": { "type": "number" },
+        "transportFee": { "type": "number" },
+        "libraryFee": { "type": "number" },
+        "otherFee": { "type": "number" },
+        "totalFee": { "type": "number" },
+        "term": { "type": "string" }
+      },
+      "required": ["gradeClass", "tuitionFee"]
+    },
+    "feePayments": {
+      "title": "Fee Payments",
+      "description": "Payment transactions recorded for students",
+      "properties": {
+        "receiptNo": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "gradeClass": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "paymentDate": { "type": "string" },
+        "paymentMode": { "type": "string" },
+        "feeType": { "type": "string" },
+        "transactionRef": { "type": "string" },
+        "remarks": { "type": "string" },
+        "receivedBy": { "type": "string" }
+      },
+      "required": ["receiptNo", "studentId", "amountPaid", "paymentDate", "paymentMode"]
+    },
+    "exams": {
+      "title": "Exams",
+      "description": "Exam definitions and metadata",
+      "properties": {
+        "title": { "type": "string" },
+        "term": { "type": "string" },
+        "academicYear": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "gradeClasses": { "type": "array", "items": { "type": "string" } },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string" }
+      },
+      "required": ["title", "term", "academicYear"]
+    },
+    "examResults": {
+      "title": "Exam Results",
+      "description": "Student marks and exam performance",
+      "properties": {
+        "examId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "gradeClass": { "type": "string" },
+        "subjectMarks": { "type": "object" },
+        "totalMarks": { "type": "number" },
+        "maxPossible": { "type": "number" },
+        "average": { "type": "number" },
+        "grade": { "type": "string" },
+        "position": { "type": "number" },
+        "resultStatus": { "type": "string" },
+        "teacherRemarks": { "type": "string" }
+      },
+      "required": ["examId", "studentId", "subjectMarks"]
+    },
+    "notifications": {
+      "title": "Notifications",
+      "description": "Log of SMS / WhatsApp messages sent to parents",
+      "properties": {
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "channel": { "type": "string" },
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "status": { "type": "string" },
+        "sentBy": { "type": "string" }
+      },
+      "required": ["parentPhone", "message", "channel", "sentAt"]
+    },
+    "users": {
+      "title": "Users",
+      "description": "App users and assigned roles",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  }
+}
