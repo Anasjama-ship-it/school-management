@@ -9,7 +9,8 @@ import {
   User,
   Phone,
   Sparkles,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 import { Student, NotificationLog, NotificationChannel, NotificationType } from '../../types';
 
@@ -17,6 +18,7 @@ interface NotificationsModuleProps {
   students: Student[];
   notifications: NotificationLog[];
   onSendNotification: (notif: Omit<NotificationLog, 'id'>) => Promise<void>;
+  onDeleteNotification?: (notif: NotificationLog) => Promise<void>;
   currentUserRole: string;
 }
 
@@ -24,6 +26,7 @@ export const NotificationsModule: React.FC<NotificationsModuleProps> = ({
   students,
   notifications,
   onSendNotification,
+  onDeleteNotification,
   currentUserRole
 }) => {
   const [selectedStudentId, setSelectedStudentId] = useState(students[0]?.studentId || '');
@@ -241,9 +244,24 @@ export const NotificationsModule: React.FC<NotificationsModuleProps> = ({
                     </div>
                   </div>
 
-                  <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold self-start sm:self-center">
-                    {notif.status}
-                  </span>
+                  <div className="flex items-center space-x-2 self-start sm:self-center">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                      {notif.status}
+                    </span>
+                    {onDeleteNotification && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Move notification for "${notif.studentName || 'Parent'}" to Trash?`)) {
+                            onDeleteNotification(notif);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors title='Delete notification'"
+                        title="Delete notification"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))
             )}

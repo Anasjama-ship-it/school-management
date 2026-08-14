@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS public.teachers (
   full_name TEXT NOT NULL,
   email TEXT NOT NULL,
   phone TEXT NOT NULL,
+  username TEXT,
   subjects JSONB DEFAULT '[]'::jsonb,
   assigned_classes JSONB DEFAULT '[]'::jsonb,
   qualification TEXT,
@@ -141,9 +142,11 @@ CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   uid TEXT UNIQUE,
   email TEXT UNIQUE NOT NULL,
+  username TEXT UNIQUE,
   display_name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'Teacher',
   status TEXT DEFAULT 'Active',
+  teacher_id TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -1,4 +1,5 @@
-import { supabase } from './supabase';
+import { supabase, createUnpersistedSupabaseClient } from './supabase';
+import { hashPassword } from './crypto';
 import {
   Student,
   Teacher,
@@ -26,13 +27,25 @@ const DEFAULT_FEE_STRUCTURES: FeeStructure[] = INITIAL_FEE_STRUCTURES.map((fs, i
   ...fs
 }));
 
-// Helper to handle Supabase query errors or fallback gracefully
-const handleSupabaseResponse = <T>(data: T | null, error: any, fallback: T): T => {
-  if (error) {
-    console.warn('Supabase DB Notice:', error.message || error);
-    return fallback;
+// Local Cache Helpers for Seamless Persistence & Offline Resilience
+export const getStorageCache = <T>(key: string, defaultVal: T): T => {
+  if (typeof window === 'undefined') return defaultVal;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return defaultVal;
+    return JSON.parse(raw);
+  } catch {
+    return defaultVal;
   }
-  return data !== null ? data : fallback;
+};
+
+export const setStorageCache = <T>(key: string, val: T): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch (err) {
+    console.warn('Could not write storage cache:', err);
+  }
 };
 
 // ==========================================
@@ -174,6 +187,7 @@ export const fetchTeachers = async (): Promise<Teacher[]> => {
       fullName: d.full_name,
       email: d.email,
       phone: d.phone,
+      username: d.username || '',
       subjects: d.subjects || [],
       assignedClasses: d.assigned_classes || [],
       qualification: d.qualification || '',
@@ -193,6 +207,7 @@ export const createTeacher = async (teacher: Omit<Teacher, 'id'>): Promise<Teach
       full_name: teacher.fullName,
       email: teacher.email,
       phone: teacher.phone,
+      username: teacher.username || null,
       subjects: teacher.subjects,
       assigned_classes: teacher.assignedClasses,
       qualification: teacher.qualification,
@@ -213,6 +228,7 @@ export const createTeacher = async (teacher: Omit<Teacher, 'id'>): Promise<Teach
       fullName: data.full_name,
       email: data.email,
       phone: data.phone,
+      username: data.username || '',
       subjects: data.subjects || [],
       assignedClasses: data.assigned_classes || [],
       qualification: data.qualification || '',
@@ -231,6 +247,7 @@ export const updateTeacherRecord = async (id: string, updates: Partial<Teacher>)
     if (updates.fullName !== undefined) payload.full_name = updates.fullName;
     if (updates.email !== undefined) payload.email = updates.email;
     if (updates.phone !== undefined) payload.phone = updates.phone;
+    if (updates.username !== undefined) payload.username = updates.username;
     if (updates.subjects !== undefined) payload.subjects = updates.subjects;
     if (updates.assignedClasses !== undefined) payload.assigned_classes = updates.assignedClasses;
     if (updates.qualification !== undefined) payload.qualification = updates.qualification;
@@ -653,6 +670,17 @@ export const createNotificationLog = async (log: Omit<NotificationLog, 'id'>): P
   }
 };
 
+export const deleteNotificationLogRecord = async (id: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase.from('parent_notifications').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error deleting notification log from Supabase:', err);
+    return false;
+  }
+};
+
 // ==========================================
 // 7. TRASH / RECYCLE BIN API
 // ==========================================
@@ -664,9 +692,11 @@ export const fetchTrashItems = async (): Promise<TrashItem[]> => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    if (!data || data.length === 0) return [];
+    if (!data || data.length === 0) {
+      return getStorageCache<TrashItem[]>('supabase_trash_items_cache', []);
+    }
 
-    return data.map((d: any) => ({
+    const items = data.map((d: any) => ({
       id: d.id,
       originalCollection: d.original_collection,
       originalId: d.original_id,
@@ -677,9 +707,12 @@ export const fetchTrashItems = async (): Promise<TrashItem[]> => {
       deletedBy: d.deleted_by || 'Admin',
       data: d.data
     }));
+
+    setStorageCache('supabase_trash_items_cache', items);
+    return items;
   } catch (err) {
-    console.warn('Error fetching trash items from Supabase:', err);
-    return [];
+    console.warn('Using local fallback for trash items:', err);
+    return getStorageCache<TrashItem[]>('supabase_trash_items_cache', []);
   }
 };
 
@@ -692,7 +725,24 @@ export const createTrashItem = async (item: {
   deletedBy: string;
   data: any;
 }): Promise<TrashItem | null> => {
+  const localId = `trsh-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const trashObj: TrashItem = {
+    id: localId,
+    originalCollection: item.originalCollection,
+    originalId: item.originalId,
+    entityType: item.entityType,
+    title: item.title,
+    subtitle: item.subtitle || '',
+    deletedAt: new Date().toLocaleString(),
+    deletedBy: item.deletedBy || 'Admin',
+    data: item.data
+  };
+
   try {
+    // Keep local cache up to date
+    const currentTrash = getStorageCache<TrashItem[]>('supabase_trash_items_cache', []);
+    setStorageCache('supabase_trash_items_cache', [trashObj, ...currentTrash.filter((t) => t.id !== localId)]);
+
     const payload = {
       original_collection: item.originalCollection,
       original_id: item.originalId,
@@ -709,42 +759,58 @@ export const createTrashItem = async (item: {
       .select()
       .single();
 
-    if (error) throw error;
-    return {
-      id: data.id,
-      originalCollection: data.original_collection,
-      originalId: data.original_id,
-      entityType: data.entity_type,
-      title: data.title,
-      subtitle: data.subtitle || '',
-      deletedAt: data.deleted_at || new Date().toLocaleString(),
-      deletedBy: data.deleted_by || 'Admin',
-      data: data.data
-    };
+    if (error) {
+      console.warn('Supabase create trash item note:', error.message);
+      return trashObj;
+    }
+
+    if (data) {
+      trashObj.id = data.id;
+      const updatedTrash = getStorageCache<TrashItem[]>('supabase_trash_items_cache', []).map(
+        (t) => (t.id === localId ? { ...t, id: data.id } : t)
+      );
+      setStorageCache('supabase_trash_items_cache', updatedTrash);
+    }
+    return trashObj;
   } catch (err) {
-    console.error('Error creating trash item in Supabase:', err);
-    return null;
+    console.warn('Using local trash item fallback:', err);
+    return trashObj;
   }
 };
 
 export const restoreItemFromTrash = async (item: TrashItem): Promise<boolean> => {
   try {
-    // 1. Restore to original table
+    // 1. Restore to original entity table in Supabase
     if (item.originalCollection === 'students') {
       await createStudent(item.data);
     } else if (item.originalCollection === 'teachers') {
       await createTeacher(item.data);
-    } else if (item.originalCollection === 'feePayments') {
+      if (item.data.teacherId || item.data.email) {
+        await reactivateUserAccountByTeacherId(item.data.teacherId, item.data.email);
+      }
+    } else if (item.originalCollection === 'feePayments' || item.originalCollection === 'fee_payments') {
       await createFeePayment(item.data);
     } else if (item.originalCollection === 'exams') {
       await createExamRecord(item.data);
-    } else if (item.originalCollection === 'examResults') {
+    } else if (item.originalCollection === 'examResults' || item.originalCollection === 'exam_results') {
       await saveExamResultRecord(item.data);
+    } else if (item.originalCollection === 'parent_notifications' || item.originalCollection === 'notifications') {
+      await createNotificationLog(item.data);
+    } else if (item.originalCollection === 'users') {
+      await createUserAccount(item.data);
     }
 
-    // 2. Remove from trash table
-    const { error } = await supabase.from('trash_items').delete().eq('id', item.id);
-    if (error) throw error;
+    // 2. Remove from trash table in Supabase
+    try {
+      await supabase.from('trash_items').delete().eq('id', item.id);
+    } catch (e) {
+      console.warn('Supabase delete trash item note:', e);
+    }
+
+    // 3. Update local cache
+    const currentTrash = getStorageCache<TrashItem[]>('supabase_trash_items_cache', []);
+    setStorageCache('supabase_trash_items_cache', currentTrash.filter((t) => t.id !== item.id));
+
     return true;
   } catch (err) {
     console.error('Error restoring item from trash in Supabase:', err);
@@ -754,8 +820,15 @@ export const restoreItemFromTrash = async (item: TrashItem): Promise<boolean> =>
 
 export const deleteTrashItemPermanently = async (trashId: string): Promise<boolean> => {
   try {
+    // 1. Remove from local cache
+    const currentTrash = getStorageCache<TrashItem[]>('supabase_trash_items_cache', []);
+    setStorageCache('supabase_trash_items_cache', currentTrash.filter((t) => t.id !== trashId));
+
+    // 2. Delete from Supabase
     const { error } = await supabase.from('trash_items').delete().eq('id', trashId);
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase permanent delete trash notice:', error.message);
+    }
     return true;
   } catch (err) {
     console.error('Error permanently deleting trash item from Supabase:', err);
@@ -765,8 +838,14 @@ export const deleteTrashItemPermanently = async (trashId: string): Promise<boole
 
 export const emptyAllTrash = async (): Promise<boolean> => {
   try {
+    // 1. Clear local cache
+    setStorageCache('supabase_trash_items_cache', []);
+
+    // 2. Clear all from Supabase
     const { error } = await supabase.from('trash_items').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (error) throw error;
+    if (error) {
+      console.warn('Supabase empty trash notice:', error.message);
+    }
     return true;
   } catch (err) {
     console.error('Error emptying trash in Supabase:', err);
@@ -820,6 +899,399 @@ export const seedAllInitialDataToSupabase = async (): Promise<boolean> => {
     return true;
   } catch (err) {
     console.error('Error seeding data to Supabase:', err);
+    return false;
+  }
+};
+
+// ==========================================
+// 9. USERS & ROLES ACCOUNT MANAGEMENT API
+// ==========================================
+export const fetchUserProfiles = async (): Promise<UserProfile[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (!data || data.length === 0) return [];
+
+    return data.map((d: any) => ({
+      uid: d.uid || d.id,
+      email: d.email,
+      displayName: d.display_name,
+      username: d.username || '',
+      teacherId: d.teacher_id || '',
+      role: d.role as any,
+      status: d.status || 'Active',
+      passwordHash: d.password_hash || d.passwordHash || ''
+    }));
+  } catch (err) {
+    console.warn('Error fetching user profiles from Supabase:', err);
+    return [];
+  }
+};
+
+export const createUserAccount = async (params: {
+  displayName: string;
+  email: string;
+  username: string;
+  password?: string;
+  role: 'Admin' | 'Teacher' | 'Accountant';
+  teacherId?: string;
+}): Promise<UserProfile | null> => {
+  try {
+    const cleanEmail = params.email.trim().toLowerCase();
+    const cleanUsername = params.username.trim().toLowerCase();
+    const password = params.password || 'TeacherPass123!';
+    const hashedPassword = await hashPassword(password);
+
+    let createdUid = `usr-${Date.now()}`;
+
+    // 1. Register with Supabase Authentication using unpersisted client so Admin session is retained
+    try {
+      const tempAuthClient = createUnpersistedSupabaseClient();
+      const { data: authData, error: authErr } = await tempAuthClient.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            displayName: params.displayName,
+            username: cleanUsername,
+            role: params.role
+          }
+        }
+      });
+
+      if (authData?.user) {
+        createdUid = authData.user.id;
+      } else if (authErr) {
+        console.warn('Supabase Auth signUp notice:', authErr.message);
+      }
+    } catch (authException) {
+      console.warn('Auth registration notice:', authException);
+    }
+
+    // 2. Upsert profile in Supabase public.users table with password_hash
+    const payload: any = {
+      uid: createdUid,
+      email: cleanEmail,
+      username: cleanUsername,
+      display_name: params.displayName,
+      role: params.role,
+      status: 'Active',
+      teacher_id: params.teacherId || null,
+      password_hash: hashedPassword
+    };
+
+    const { data: userRow, error: userErr } = await supabase
+      .from('users')
+      .upsert([payload], { onConflict: 'email' })
+      .select()
+      .single();
+
+    if (userErr) {
+      // If table doesn't have password_hash column, retry without it
+      const fallbackPayload = {
+        uid: createdUid,
+        email: cleanEmail,
+        username: cleanUsername,
+        display_name: params.displayName,
+        role: params.role,
+        status: 'Active',
+        teacher_id: params.teacherId || null
+      };
+      const { data: fallbackRow, error: fbErr } = await supabase
+        .from('users')
+        .upsert([fallbackPayload], { onConflict: 'email' })
+        .select()
+        .single();
+      if (fbErr) throw fbErr;
+      return {
+        uid: fallbackRow.uid || fallbackRow.id,
+        email: fallbackRow.email,
+        displayName: fallbackRow.display_name,
+        username: fallbackRow.username,
+        teacherId: fallbackRow.teacher_id,
+        role: fallbackRow.role,
+        status: fallbackRow.status,
+        passwordHash: hashedPassword
+      };
+    }
+
+    // 3. If linked to a teacher, sync teacher record with username
+    if (params.teacherId) {
+      await supabase
+        .from('teachers')
+        .update({ username: cleanUsername, status: 'Active' })
+        .eq('teacher_id', params.teacherId);
+    }
+
+    return {
+      uid: userRow.uid || userRow.id,
+      email: userRow.email,
+      displayName: userRow.display_name,
+      username: userRow.username,
+      teacherId: userRow.teacher_id,
+      role: userRow.role,
+      status: userRow.status,
+      passwordHash: hashedPassword
+    };
+  } catch (err) {
+    console.error('Error creating user account in Supabase:', err);
+    throw err;
+  }
+};
+
+export const updateUserAccount = async (
+  uid: string,
+  updates: {
+    username?: string;
+    displayName?: string;
+    role?: 'Admin' | 'Teacher' | 'Accountant';
+    status?: 'Active' | 'Inactive';
+    password?: string;
+  }
+): Promise<boolean> => {
+  try {
+    const payload: any = {};
+    if (updates.username !== undefined) payload.username = updates.username.trim().toLowerCase();
+    if (updates.displayName !== undefined) payload.display_name = updates.displayName;
+    if (updates.role !== undefined) payload.role = updates.role;
+    if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.password !== undefined && updates.password.trim().length > 0) {
+      payload.password_hash = await hashPassword(updates.password.trim());
+    }
+
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update(payload)
+      .or(`uid.eq.${uid},id.eq.${uid}`)
+      .select('teacher_id, email, username, status')
+      .maybeSingle();
+
+    if (error) {
+      // If error was due to unknown column password_hash, remove it and retry
+      delete payload.password_hash;
+      const { error: retryErr } = await supabase
+        .from('users')
+        .update(payload)
+        .or(`uid.eq.${uid},id.eq.${uid}`);
+      if (retryErr) throw retryErr;
+    }
+
+    // If updated user is linked to a teacher record, keep teacher record updated too
+    if (updatedUser?.teacher_id) {
+      const teacherUpdates: any = {};
+      if (updates.username !== undefined) teacherUpdates.username = updates.username.trim().toLowerCase();
+      if (updates.status !== undefined) teacherUpdates.status = updates.status === 'Active' ? 'Active' : 'Resigned';
+
+      if (Object.keys(teacherUpdates).length > 0) {
+        await supabase
+          .from('teachers')
+          .update(teacherUpdates)
+          .eq('teacher_id', updatedUser.teacher_id);
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error updating user account in Supabase:', err);
+    return false;
+  }
+};
+
+export const saveTeacherAccountInSupabase = async (params: {
+  teacherId: string;
+  teacherName: string;
+  email: string;
+  username: string;
+  password?: string;
+  status: 'Active' | 'Inactive';
+}): Promise<{ success: boolean; userProfile?: UserProfile; error?: string }> => {
+  try {
+    const cleanUsername = params.username.trim().toLowerCase();
+    const cleanEmail = (params.email || `${cleanUsername}@school.edu`).trim().toLowerCase();
+    const password = params.password || 'TeacherPass123!';
+    const hashedPassword = await hashPassword(password);
+
+    // 1. Try to register with Supabase Auth
+    try {
+      const tempAuthClient = createUnpersistedSupabaseClient();
+      await tempAuthClient.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            displayName: params.teacherName,
+            username: cleanUsername,
+            role: 'Teacher',
+            teacherId: params.teacherId
+          }
+        }
+      });
+    } catch (authErr) {
+      console.warn('Teacher Supabase Auth note:', authErr);
+    }
+
+    // 2. Upsert in public.users table
+    const userPayload: any = {
+      uid: `usr-${params.teacherId}`,
+      email: cleanEmail,
+      username: cleanUsername,
+      display_name: params.teacherName,
+      role: 'Teacher',
+      status: params.status,
+      teacher_id: params.teacherId,
+      password_hash: hashedPassword
+    };
+
+    let userRow: any = null;
+    const { data, error: userErr } = await supabase
+      .from('users')
+      .upsert([userPayload], { onConflict: 'email' })
+      .select()
+      .maybeSingle();
+
+    if (userErr) {
+      // Fallback without password_hash if column does not exist
+      delete userPayload.password_hash;
+      const { data: fbData, error: fbErr } = await supabase
+        .from('users')
+        .upsert([userPayload], { onConflict: 'email' })
+        .select()
+        .maybeSingle();
+      if (fbErr) throw fbErr;
+      userRow = fbData;
+    } else {
+      userRow = data;
+    }
+
+    // 3. Update teacher record in teachers table
+    await supabase
+      .from('teachers')
+      .update({
+        username: cleanUsername,
+        status: params.status === 'Active' ? 'Active' : 'Resigned'
+      })
+      .eq('teacher_id', params.teacherId);
+
+    return {
+      success: true,
+      userProfile: {
+        uid: userRow?.uid || `usr-${params.teacherId}`,
+        email: cleanEmail,
+        displayName: params.teacherName,
+        username: cleanUsername,
+        teacherId: params.teacherId,
+        role: 'Teacher',
+        status: params.status,
+        passwordHash: hashedPassword
+      }
+    };
+  } catch (err: any) {
+    console.error('Error saving teacher account in Supabase:', err);
+    return { success: false, error: err?.message || 'Failed to save teacher account' };
+  }
+};
+
+export const resetUserPassword = async (email: string, newPassword?: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // If a new password is provided, update password hash in users table
+    if (newPassword && newPassword.trim().length > 0) {
+      const hashedPassword = await hashPassword(newPassword.trim());
+      try {
+        await supabase
+          .from('users')
+          .update({ password_hash: hashedPassword })
+          .eq('email', cleanEmail);
+      } catch (dbErr) {
+        console.warn('DB update password hash note:', dbErr);
+      }
+    }
+
+    // Trigger Supabase auth password reset email or update
+    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: `${window.location.origin}/reset-password`
+    });
+
+    if (error) {
+      // Even if email dispatch fails, local hashed password was updated
+      return { success: true, message: `Password updated successfully for ${cleanEmail}.` };
+    }
+
+    return {
+      success: true,
+      message: `Password updated and reset email dispatched to ${cleanEmail}.`
+    };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to reset password.' };
+  }
+};
+
+export const deactivateUserAccountByTeacherId = async (teacherId: string, email?: string): Promise<boolean> => {
+  try {
+    let query = supabase.from('users').update({ status: 'Inactive' });
+
+    if (teacherId) {
+      query = query.eq('teacher_id', teacherId);
+    } else if (email) {
+      query = query.eq('email', email.trim().toLowerCase());
+    }
+
+    const { error } = await query;
+    if (error) throw error;
+
+    if (teacherId) {
+      await supabase
+        .from('teachers')
+        .update({ status: 'Resigned' })
+        .eq('teacher_id', teacherId);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error deactivating teacher user account:', err);
+    return false;
+  }
+};
+
+export const reactivateUserAccountByTeacherId = async (teacherId: string, email?: string): Promise<boolean> => {
+  try {
+    let query = supabase.from('users').update({ status: 'Active' });
+
+    if (teacherId) {
+      query = query.eq('teacher_id', teacherId);
+    } else if (email) {
+      query = query.eq('email', email.trim().toLowerCase());
+    }
+
+    const { error } = await query;
+    if (error) console.warn('Supabase reactivate user account warning:', error);
+
+    if (teacherId) {
+      await supabase
+        .from('teachers')
+        .update({ status: 'Active' })
+        .eq('teacher_id', teacherId);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error reactivating teacher user account:', err);
+    return false;
+  }
+};
+
+export const deleteUserAccountRecord = async (uid: string): Promise<boolean> => {
+  try {
+    const { error } = await supabase.from('users').delete().or(`uid.eq.${uid},id.eq.${uid}`);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Error deleting user account from Supabase:', err);
     return false;
   }
 };

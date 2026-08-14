@@ -10,7 +10,9 @@ import {
   ShieldCheck,
   School,
   X,
-  Trash2
+  Trash2,
+  LogOut,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../types';
@@ -30,7 +32,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   setIsOpen
 }) => {
-  const { activeRole, switchRole, hasRole } = useAuth();
+  const { activeRole, switchRole, hasRole, userProfile, logout } = useAuth();
 
   const navItems = [
     {
@@ -197,9 +199,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="p-3 border-t border-slate-800 text-center text-[11px] text-slate-500">
-          Springfield SMS v2.5 • Supabase Database
+        {/* Footer & Logout */}
+        <div className="p-3 border-t border-slate-800 space-y-2">
+          {userProfile && (
+            <div className="px-3 py-2 bg-slate-800/60 rounded-xl flex items-center justify-between">
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-xs text-white shrink-0">
+                  {userProfile.displayName ? userProfile.displayName.charAt(0) : 'U'}
+                </div>
+                <div className="truncate">
+                  <div className="text-xs font-semibold text-white truncate">
+                    {userProfile.displayName}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    @{userProfile.username || userProfile.email.split('@')[0]}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                id="sidebar-logout-btn"
+                onClick={() => logout()}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all shrink-0"
+                title="Log Out (Ka Bax)"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          <div className="text-center text-[10px] text-slate-500 font-medium">
+            Springfield SMS v2.5 • Supabase Database
+          </div>
         </div>
       </aside>
     </>

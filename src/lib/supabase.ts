@@ -91,6 +91,17 @@ export const saveSupabaseConfig = (url: string, key: string) => {
   }
 };
 
+export const createUnpersistedSupabaseClient = (): SupabaseClient => {
+  const creds = getStoredCredentials();
+  return createClient(creds.url, creds.key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+};
+
 export const resetSupabaseConfig = () => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('supabase_custom_url');

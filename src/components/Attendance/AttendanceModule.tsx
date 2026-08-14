@@ -9,11 +9,13 @@ import {
   CheckCheck,
   Search,
   Download,
-  Filter
+  Filter,
+  GraduationCap
 } from 'lucide-react';
 import { Student, AttendanceStatus, DailyAttendance, StudentAttendanceRecord } from '../../types';
 import { INITIAL_CLASSES } from '../../lib/seedData';
 import { exportToExcel } from '../../lib/exportUtils';
+import { useAuth } from '../../context/AuthContext';
 
 interface AttendanceModuleProps {
   students: Student[];
@@ -28,14 +30,27 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
   onSaveAttendance,
   currentUserRole
 }) => {
+  const { userProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<'daily' | 'monthly' | 'student'>('daily');
 
+  // Available classes: if Teacher, prioritize assigned classes
+  const teacherClasses =
+    currentUserRole === 'Teacher' && userProfile?.assignedClasses && userProfile.assignedClasses.length > 0
+      ? userProfile.assignedClasses
+      : INITIAL_CLASSES;
+
   // Daily Marking State
-  const [selectedClass, setSelectedClass] = useState('Grade 10A');
+  const [selectedClass, setSelectedClass] = useState<string>(teacherClasses[0] || 'Grade 10A');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dailyStatusMap, setDailyStatusMap] = useState<Record<string, { status: AttendanceStatus; remarks: string }>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    if (teacherClasses.length > 0 && !teacherClasses.includes(selectedClass)) {
+      setSelectedClass(teacherClasses[0]);
+    }
+  }, [currentUserRole, userProfile]);
 
   // Get students in selected class
   const classStudents = students.filter((s) => s.gradeClass === selectedClass);
@@ -192,7 +207,7 @@ export const AttendanceModule: React.FC<AttendanceModuleProps> = ({
                   onChange={(e) => setSelectedClass(e.target.value)}
                   className="py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800"
                 >
-                  {INITIAL_CLASSES.map((c) => (
+                  {teacherClasses.map((c) => (
                     <option key={c} value={c}>
                       {c}
                     </option>

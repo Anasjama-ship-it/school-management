@@ -14,10 +14,15 @@ import {
   Award,
   AlertTriangle,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  UserCheck,
+  KeyRound,
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { Teacher, TeacherStatus } from '../../types';
 import { INITIAL_CLASSES, ALL_SUBJECTS } from '../../lib/seedData';
+import { createUserAccount } from '../../lib/supabaseApi';
 
 interface TeachersModuleProps {
   teachers: Teacher[];
@@ -72,11 +77,15 @@ export const TeachersModule: React.FC<TeachersModuleProps> = ({
     }
   };
 
+  const [teacherUsername, setTeacherUsername] = useState('');
+  const [teacherPassword, setTeacherPassword] = useState('Teacher2026!');
+
   const [formData, setFormData] = useState<Omit<Teacher, 'id'>>({
     teacherId: `TCH-2026-0${teachers.length + 1}`,
     fullName: '',
     email: '',
     phone: '',
+    username: '',
     subjects: ['Mathematics'],
     assignedClasses: ['Grade 10A'],
     qualification: 'M.Sc. Education',
@@ -88,16 +97,22 @@ export const TeachersModule: React.FC<TeachersModuleProps> = ({
     (t) =>
       t.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.teacherId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.username && t.username.toLowerCase().includes(searchTerm.toLowerCase())) ||
       t.subjects.some((s) => s.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const handleOpenAddModal = () => {
     setEditingTeacher(null);
+    const nextNum = teachers.length + 1;
+    const defaultUser = `teacher${nextNum}`;
+    setTeacherUsername(defaultUser);
+    setTeacherPassword('Teacher2026!');
     setFormData({
-      teacherId: `TCH-2026-0${teachers.length + 1}`,
+      teacherId: `TCH-2026-0${nextNum}`,
       fullName: '',
-      email: '',
-      phone: '',
+      email: `teacher${nextNum}@school.edu`,
+      phone: '+1 (555) 012-3456',
+      username: defaultUser,
       subjects: ['Mathematics'],
       assignedClasses: ['Grade 10A'],
       qualification: 'M.Sc.',
@@ -109,11 +124,15 @@ export const TeachersModule: React.FC<TeachersModuleProps> = ({
 
   const handleOpenEditModal = (t: Teacher) => {
     setEditingTeacher(t);
+    const uname = t.username || t.email.split('@')[0] || '';
+    setTeacherUsername(uname);
+    setTeacherPassword('');
     setFormData({
       teacherId: t.teacherId,
       fullName: t.fullName,
       email: t.email,
       phone: t.phone,
+      username: uname,
       subjects: t.subjects,
       assignedClasses: t.assignedClasses,
       qualification: t.qualification,
@@ -150,17 +169,54 @@ export const TeachersModule: React.FC<TeachersModuleProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.fullName || !formData.email || !formData.phone) {
-      alert('Please fill in required fields: Full Name, Email, and Phone.');
+    if (!formData.fullName || !formData.email || !formData.phone || !teacherUsername) {
+      alert('Please fill in required fields: Full Name, Email, Phone, and Username.');
       return;
     }
 
-    if (editingTeacher) {
-      await onUpdateTeacher(editingTeacher.id, formData);
-    } else {
-      await onAddTeacher(formData);
+    const cleanUsername = teacherUsername.toLowerCase().trim();
+
+    try {
+      if (editingTeacher) {
+        await onUpdateTeacher(editingTeacher.id, {
+          ...formData,
+          username: cleanUsername
+        });
+
+        // Also sync/create user account in Supabase
+        await createUserAccount({
+          displayName: formData.fullName,
+          email: formData.email,
+          username: cleanUsername,
+          role: 'Teacher',
+          teacherId: formData.teacherId
+        });
+
+        setSuccessMessage(`Updated teacher record & login username for "${formData.fullName}" (@${cleanUsername}).`);
+      } else {
+        await onAddTeacher({
+          ...formData,
+          username: cleanUsername
+        });
+
+        // Create Supabase Auth & Users table login account
+        await createUserAccount({
+          displayName: formData.fullName,
+          email: formData.email,
+          username: cleanUsername,
+          password: teacherPassword || 'Teacher2026!',
+          role: 'Teacher',
+          teacherId: formData.teacherId
+        });
+
+        setSuccessMessage(`Created Teacher profile and login account (@${cleanUsername}) with Supabase Auth!`);
+      }
+      setIsModalOpen(false);
+      setTimeout(() => setSuccessMessage(null), 6000);
+    } catch (err: any) {
+      console.error('Error saving teacher and user account:', err);
+      alert(`Error saving teacher: ${err?.message || 'Failed to create login account.'}`);
     }
-    setIsModalOpen(false);
   };
 
   return (
@@ -235,8 +291,13 @@ export const TeachersModule: React.FC<TeachersModuleProps> = ({
                     <h3 className="font-bold text-slate-900 text-sm leading-snug">
                       {teacher.fullName}
                     </h3>
-                    <div className="text-[11px] font-mono text-blue-600 font-semibold">
-                      {teacher.teacherId}
+                    <div className="flex items-center space-x-1.5 mt-0.5">
+                      <span className="text-[11px] font-mono text-blue-600 font-semibold">
+                        {teacher.teacherId}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 font-mono font-bold border border-purple-200">
+                        @{teacher.username || teacher.email.split('@')[0]}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -434,6 +495,52 @@ export const TeachersModule: React.FC<TeachersModuleProps> = ({
                     <option value="On Leave">On Leave</option>
                     <option value="Resigned">Resigned</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Login Account Credentials */}
+              <div className="p-4 bg-purple-50/60 rounded-2xl border border-purple-200 space-y-3">
+                <div className="flex items-center space-x-2 text-purple-900 font-bold text-xs">
+                  <ShieldCheck className="w-4 h-4 text-purple-600" />
+                  <span>Teacher Login Credentials (Supabase Auth Account)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Login Username <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs text-slate-400 font-mono">@</span>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. m_vance"
+                        value={teacherUsername}
+                        onChange={(e) => setTeacherUsername(e.target.value.toLowerCase().replace(/\s+/g, '_'))}
+                        className="w-full pl-7 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono font-medium focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Unique login handle for teacher portal access.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      {editingTeacher ? 'Set New Password (Optional)' : 'Login Password *'}
+                    </label>
+                    <div className="relative">
+                      <KeyRound className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="password"
+                        required={!editingTeacher}
+                        placeholder={editingTeacher ? 'Leave blank to keep existing password' : 'At least 6 characters'}
+                        value={teacherPassword}
+                        onChange={(e) => setTeacherPassword(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Stored securely via Supabase Auth (encrypted).</p>
+                  </div>
                 </div>
               </div>
 

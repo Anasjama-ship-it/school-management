@@ -27,6 +27,7 @@ export interface Teacher {
   fullName: string;
   email: string;
   phone: string;
+  username?: string;
   subjects: string[]; // e.g. ['Mathematics', 'Physics']
   assignedClasses: string[]; // e.g. ['Grade 10A', 'Grade 11B']
   qualification: string;
@@ -132,8 +133,12 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
+  username?: string;
+  teacherId?: string;
   role: UserRole;
   status: 'Active' | 'Inactive';
+  passwordHash?: string;
+  assignedClasses?: string[];
 }
 
 export interface FeeSummary {

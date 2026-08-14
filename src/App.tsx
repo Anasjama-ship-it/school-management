@@ -24,12 +24,14 @@ import {
   deleteExamResultRecord,
   fetchNotifications,
   createNotificationLog,
+  deleteNotificationLogRecord,
   fetchTrashItems,
   createTrashItem,
   restoreItemFromTrash,
   deleteTrashItemPermanently,
   emptyAllTrash,
-  seedAllInitialDataToSupabase
+  seedAllInitialDataToSupabase,
+  deactivateUserAccountByTeacherId
 } from './lib/supabaseApi';
 
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -45,6 +47,7 @@ import { NotificationsModule } from './components/Notifications/NotificationsMod
 import { UsersModule } from './components/Users/UsersModule';
 import { TrashModule } from './components/Trash/TrashModule';
 import { SupabaseConfigModal } from './components/Supabase/SupabaseConfigModal';
+import { LoginPage } from './components/Login/LoginPage';
 
 import {
   Student,
@@ -220,12 +223,14 @@ function SchoolManagementApp() {
       setStudents((prev) => prev.filter((s) => s.id !== originalId));
     } else if (originalCollection === 'teachers') {
       setTeachers((prev) => prev.filter((t) => t.id !== originalId));
-    } else if (originalCollection === 'feePayments') {
+    } else if (originalCollection === 'feePayments' || originalCollection === 'fee_payments') {
       setFeePayments((prev) => prev.filter((p) => p.id !== originalId));
     } else if (originalCollection === 'exams') {
       setExams((prev) => prev.filter((e) => e.id !== originalId));
-    } else if (originalCollection === 'examResults') {
+    } else if (originalCollection === 'examResults' || originalCollection === 'exam_results') {
       setExamResults((prev) => prev.filter((r) => r.id !== originalId));
+    } else if (originalCollection === 'parent_notifications' || originalCollection === 'notifications') {
+      setNotifications((prev) => prev.filter((n) => n.id !== originalId));
     }
 
     // 2. Create trash record in Supabase
@@ -246,9 +251,10 @@ function SchoolManagementApp() {
     // 3. Delete from original Supabase table
     if (originalCollection === 'students') await deleteStudentRecord(originalId);
     else if (originalCollection === 'teachers') await deleteTeacherRecord(originalId);
-    else if (originalCollection === 'feePayments') await deleteFeePaymentRecord(originalId);
+    else if (originalCollection === 'feePayments' || originalCollection === 'fee_payments') await deleteFeePaymentRecord(originalId);
     else if (originalCollection === 'exams') await deleteExamRecord(originalId);
-    else if (originalCollection === 'examResults') await deleteExamResultRecord(originalId);
+    else if (originalCollection === 'examResults' || originalCollection === 'exam_results') await deleteExamResultRecord(originalId);
+    else if (originalCollection === 'parent_notifications' || originalCollection === 'notifications') await deleteNotificationLogRecord(originalId);
 
     // 4. Reload full Supabase state
     await loadAllSupabaseData();
@@ -311,6 +317,7 @@ function SchoolManagementApp() {
   };
 
   const handleDeleteTeacher = async (teacher: Teacher) => {
+    await deactivateUserAccountByTeacherId(teacher.teacherId, teacher.email);
     await moveToTrash(
       'teachers',
       teacher.id,
@@ -388,6 +395,17 @@ function SchoolManagementApp() {
   const handleSendNotification = async (data: Omit<NotificationLog, 'id'>) => {
     await createNotificationLog(data);
     await loadAllSupabaseData();
+  };
+
+  const handleDeleteNotification = async (notif: NotificationLog) => {
+    await moveToTrash(
+      'parent_notifications',
+      notif.id,
+      'Notification',
+      `Alert to ${notif.studentName || 'Parent'}`,
+      `${notif.channel} • ${notif.type} • ${notif.parentPhone}`,
+      notif
+    );
   };
 
   const canEditStudents = hasRole(['Admin']);
@@ -509,11 +527,14 @@ function SchoolManagementApp() {
               students={students}
               notifications={notifications}
               onSendNotification={handleSendNotification}
+              onDeleteNotification={handleDeleteNotification}
               currentUserRole={activeRole}
             />
           )}
 
-          {activeTab === 'users' && <UsersModule />}
+          {activeTab === 'users' && (
+            <UsersModule teachers={teachers} onRefreshTeachers={loadAllSupabaseData} />
+          )}
 
           {activeTab === 'trash' && (
             <TrashModule
@@ -538,10 +559,31 @@ function SchoolManagementApp() {
   );
 }
 
+function MainAppRouter() {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-semibold text-slate-300">Loading Portal...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <SchoolManagementApp />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
-      <SchoolManagementApp />
+      <MainAppRouter />
     </AuthProvider>
   );
 }

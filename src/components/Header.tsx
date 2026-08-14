@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Search, Bell, Calendar, UserCheck, Database } from 'lucide-react';
+import { Menu, Search, Bell, Calendar, UserCheck, Database, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
@@ -23,7 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSupabaseModal,
   isConnectedToSupabase = false
 }) => {
-  const { userProfile, activeRole } = useAuth();
+  const { userProfile, activeRole, logout } = useAuth();
 
   const getTitle = () => {
     switch (activeTab) {
@@ -127,18 +127,30 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* User Badge */}
         <div className="flex items-center space-x-2.5 pl-2 border-l border-slate-200">
-          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs border border-blue-200">
-            {userProfile?.displayName ? userProfile.displayName.charAt(0) : 'U'}
+          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs border border-blue-200 shadow-xs">
+            {userProfile?.displayName ? userProfile.displayName.charAt(0) : 'A'}
           </div>
           <div className="hidden sm:block text-left">
             <div className="text-xs font-semibold text-slate-800 leading-tight">
-              {userProfile?.displayName || 'Active User'}
+              {userProfile?.displayName || 'Administrator'}
             </div>
             <div className="flex items-center space-x-1 text-[10px] text-slate-500 font-medium">
               <UserCheck className="w-3 h-3 text-emerald-500" />
-              <span>{activeRole}</span>
+              <span>
+                {activeRole} {userProfile?.username ? `(@${userProfile.username})` : ''}
+              </span>
             </div>
           </div>
+
+          <button
+            id="header-logout-btn"
+            onClick={() => logout()}
+            className="p-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 transition-all text-xs flex items-center space-x-1"
+            title="Log Out (Ka Bax)"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden md:inline font-semibold">Logout</span>
+          </button>
         </div>
       </div>
     </header>
